@@ -370,34 +370,47 @@
     <script>
         // Configuration
         const getApiEndpoint = () => {
-            // Check if we're running locally
-            const isLocalhost = window.location.hostname.includes('192.168.1.50');
-                                
+            // Check if we're running locally using more reliable detection
+            const hostname = window.location.hostname;
+            const isLocalhost = hostname === 'localhost' || 
+                               hostname === '127.0.0.1' || 
+                               hostname.includes('192.168.1.50') ||
+                               hostname.startsWith('192.168.') ||
+                               hostname.startsWith('10.') ||
+                               hostname.endsWith('.local');
+            
             // Use local endpoint for local development, remote for production
             return isLocalhost 
                 ? 'http://192.168.1.50:11434/api/generate'  // Local Ollama endpoint
                 : 'https://ollama.mhrpci.site/api/generate';  // Production endpoint
         };
         
-        const API_ENDPOINT = getApiEndpoint();
-        // Fallback endpoints to try if primary fails
+        let API_ENDPOINT = getApiEndpoint();
+        
+        // Fallback endpoints to try if primary fails - include multiple options
         const FALLBACK_ENDPOINTS = [
             'https://ollama.mhrpci.site/api/generate', // Main production endpoint
-            'http://192.168.1.50:11434/api/generate',     // Local development endpoint
-            // Add any additional fallback endpoints here
-        ].filter(endpoint => endpoint !== API_ENDPOINT); // Remove the primary endpoint from fallbacks
+            'http://192.168.1.50:11434/api/generate',  // Local development endpoint
+            // Add more fallback endpoints here if available
+        ].filter(endpoint => endpoint !== API_ENDPOINT);
         
-        console.log(`Using API endpoint: ${API_ENDPOINT}`);
+        console.log(`Initial API endpoint: ${API_ENDPOINT}`);
         let currentEndpointIndex = -1; // -1 means using the primary endpoint
+        let consecutiveFailures = 0;
         
         // Function to try the next available endpoint
         async function tryNextEndpoint() {
             currentEndpointIndex++;
             
-            // If we've exhausted all fallbacks, reset to primary
+            // If we've exhausted all fallbacks, reset to primary after 3 consecutive failures
             if (currentEndpointIndex >= FALLBACK_ENDPOINTS.length) {
-                currentEndpointIndex = -1;
-                return API_ENDPOINT;
+                if (consecutiveFailures >= 3) {
+                    console.log("All endpoints failed multiple times. Waiting before retry.");
+                    showToast('error', 'All API endpoints are currently unavailable', 'Please try again later');
+                    return null;
+                }
+                currentEndpointIndex = 0;
+                consecutiveFailures++;
             }
             
             const nextEndpoint = FALLBACK_ENDPOINTS[currentEndpointIndex];
@@ -409,12 +422,13 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ model: 'phi:latest', prompt: 'test', stream: false }),
-                    signal: AbortSignal.timeout(3000) // 3 second timeout for fallback check
+                    signal: AbortSignal.timeout(5000) // 5 second timeout for fallback check
                 });
                 
                 if (response.ok) {
                     console.log(`Fallback endpoint working: ${nextEndpoint}`);
                     showToast('success', 'Connected to alternate API endpoint', '');
+                    API_ENDPOINT = nextEndpoint; // Update the active endpoint
                     return nextEndpoint;
                 }
             } catch (error) {
@@ -425,6 +439,161 @@
             return tryNextEndpoint();
         }
         
+        // Enhanced API call function with automatic fallback
+        async function callOllamaAPI(prompt) {
+            const selectedModel = modelSelector.value;
+            
+            // Build context from conversation history
+            let contextPrompt = '';
+            if (conversationHistory.length > 0) {
+                contextPrompt = conversationHistory.slice(-6).map(msg => 
+                    `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
+                ).join('\n') + '\nUser: ' + prompt + '\nAssistant:';
+            } else {
+                contextPrompt = `You are ChuweyWebDev AI Assistant, a helpful AI that specializes in web development, coding, and technical assistance. Be helpful, concise, and professional.\n\nUser: ${prompt}\nAssistant:`;
+            }
+
+            const requestBody = {
+                model: selectedModel,
+                prompt: contextPrompt,
+                stream: false,
+                options: {
+                    temperature: 0.7,
+                    top_p: 0.9,
+                    max_tokens: 5000
+                }
+            };
+
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            while (retryCount <= maxRetries) {
+                try {
+                    const response = await fetch(API_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody),
+                        signal: AbortSignal.timeout(15000) // 15 second timeout
+                    });
+
+                    if (!response.ok) {
+                        // If we get an error response, try a fallback
+                        console.warn(`API endpoint ${API_ENDPOINT} returned error: ${response.status}`);
+                        const newEndpoint = await tryNextEndpoint();
+                        
+                        if (!newEndpoint) {
+                            throw new Error("All API endpoints failed");
+                        }
+                        
+                        retryCount++;
+                        continue;
+                    }
+
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    // Reset consecutive failures on success
+                    consecutiveFailures = 0;
+                    return data.response || 'No response received from the model.';
+                    
+                } catch (error) {
+                    console.error(`API Error (attempt ${retryCount + 1}/${maxRetries + 1}):`, error);
+                    
+                    // Network errors or timeouts, try a fallback
+                    if (error.name === 'TypeError' || error.name === 'AbortError' || error.name === 'TimeoutError') {
+                        const newEndpoint = await tryNextEndpoint();
+                        
+                        if (!newEndpoint) {
+                            throw new Error("All API endpoints failed");
+                        }
+                    }
+                    
+                    retryCount++;
+                    if (retryCount > maxRetries) {
+                        throw new Error("Maximum retry attempts reached");
+                    }
+                }
+            }
+            
+            throw new Error("Failed to get response from any API endpoint");
+        }
+        
+        // Enhanced API status check with automatic fallback
+        async function checkAPIStatus() {
+            try {
+                // Show checking status
+                setStatus('warning', 'Checking API...');
+                
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'phi:latest',
+                        prompt: 'test',
+                        stream: false
+                    }),
+                    signal: AbortSignal.timeout(8000) // 8 second timeout
+                });
+                
+                if (response.ok) {
+                    setStatus('online', 'AI Online');
+                    console.log('API connection successful');
+                    consecutiveFailures = 0; // Reset failure counter on success
+                    return true;
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.warn('API returned an error:', errorData);
+                    
+                    // Try fallback endpoints
+                    const newEndpoint = await tryNextEndpoint();
+                    if (newEndpoint) {
+                        setStatus('online', 'AI Online (Fallback)');
+                        return true;
+                    }
+                    
+                    setStatus('warning', 'API Limited');
+                    if (typeof showToast === 'function') {
+                        showToast('warning', 'API Limited', 'The AI service is experiencing limitations');
+                    }
+                    return false;
+                }
+            } catch (error) {
+                console.error('API connection failed:', error);
+                
+                // Try fallback endpoints
+                const newEndpoint = await tryNextEndpoint();
+                if (newEndpoint) {
+                    setStatus('online', 'AI Online (Fallback)');
+                    return true;
+                }
+                
+                // Handle specific errors
+                if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+                    setStatus('offline', 'Connection Timeout');
+                } else if (error.message && error.message.includes('NetworkError')) {
+                    setStatus('offline', 'Network Error');
+                } else {
+                    setStatus('offline', 'AI Offline');
+                }
+                
+                // Show toast notification for connection issues
+                if (typeof showToast === 'function') {
+                    if (!document.getElementById('authOverlay') || document.getElementById('authOverlay').style.display === 'none') {
+                        showToast('error', 'API Connection Failed', 'Trying alternate endpoints');
+                    }
+                }
+                return false;
+            }
+        }
+        
+        // MODELS definition remains the same
         const MODELS = {
             'phi:latest': 'Phi',
             'deepseek-coder:6.7b-instruct': 'DeepSeekCoder', 
@@ -447,8 +616,10 @@
 
         // Initialize
         updateModelDisplay();
+        
+        // Check API status immediately and add more frequent checks
         checkAPIStatus();
-
+        
         // Auto-resize textarea
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
@@ -498,20 +669,26 @@
                         prompt: 'test',
                         stream: false
                     }),
-                    // Add timeout to prevent long waits
-                    signal: AbortSignal.timeout(5000) // 5 second timeout
+                    signal: AbortSignal.timeout(8000) // 8 second timeout
                 });
                 
                 if (response.ok) {
                     setStatus('online', 'AI Online');
                     console.log('API connection successful');
+                    consecutiveFailures = 0; // Reset failure counter on success
                     return true;
                 } else {
                     const errorData = await response.json().catch(() => ({}));
                     console.warn('API returned an error:', errorData);
-                    setStatus('warning', 'API Limited');
                     
-                    // Show toast notification for limited API
+                    // Try fallback endpoints
+                    const newEndpoint = await tryNextEndpoint();
+                    if (newEndpoint) {
+                        setStatus('online', 'AI Online (Fallback)');
+                        return true;
+                    }
+                    
+                    setStatus('warning', 'API Limited');
                     if (typeof showToast === 'function') {
                         showToast('warning', 'API Limited', 'The AI service is experiencing limitations');
                     }
@@ -519,6 +696,13 @@
                 }
             } catch (error) {
                 console.error('API connection failed:', error);
+                
+                // Try fallback endpoints
+                const newEndpoint = await tryNextEndpoint();
+                if (newEndpoint) {
+                    setStatus('online', 'AI Online (Fallback)');
+                    return true;
+                }
                 
                 // Handle specific errors
                 if (error.name === 'TimeoutError' || error.name === 'AbortError') {
@@ -531,9 +715,8 @@
                 
                 // Show toast notification for connection issues
                 if (typeof showToast === 'function') {
-                    // Only show if we're in the main app (authentication is done)
                     if (!document.getElementById('authOverlay') || document.getElementById('authOverlay').style.display === 'none') {
-                        showToast('error', 'API Connection Failed', 'Could not connect to AI service');
+                        showToast('error', 'API Connection Failed', 'Trying alternate endpoints');
                     }
                 }
                 return false;
@@ -584,52 +767,6 @@
                 isGenerating = false;
                 sendButton.disabled = false;
             }
-        }
-
-        // Call Ollama API
-        async function callOllamaAPI(prompt) {
-            const selectedModel = modelSelector.value;
-            
-            // Build context from conversation history
-            let contextPrompt = '';
-            if (conversationHistory.length > 0) {
-                contextPrompt = conversationHistory.slice(-6).map(msg => 
-                    `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`
-                ).join('\n') + '\nUser: ' + prompt + '\nAssistant:';
-            } else {
-                contextPrompt = `You are ChuweyWebDev AI Assistant, a helpful AI that specializes in web development, coding, and technical assistance. Be helpful, concise, and professional.\n\nUser: ${prompt}\nAssistant:`;
-            }
-
-            const requestBody = {
-                model: selectedModel,
-                prompt: contextPrompt,
-                stream: false,
-                options: {
-                    temperature: 0.7,
-                    top_p: 0.9,
-                    max_tokens: 5000
-                }
-            };
-
-            const response = await fetch(API_ENDPOINT, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            return data.response || 'No response received from the model.';
         }
 
         // Add message to chat
