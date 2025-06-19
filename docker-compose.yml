@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  html_site:
+    image: nginx:alpine
+    container_name: html_site
+    restart: always
+    ports:
+      - "1001:80"
+    volumes:
+      - ./site:/usr/share/nginx/html:ro
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=false"
+
+networks:
+  proxy:
+    external: true
