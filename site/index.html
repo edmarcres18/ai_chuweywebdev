@@ -371,60 +371,103 @@
 
     <script>
         // Configuration
-        const getApiEndpoint = () => {
-            // Check if we're running locally
-            const isLocalhost = window.location.hostname.includes('192.168.1.50');
-                                
-            // Use local endpoint for local development, remote for production
-            return isLocalhost 
-                ? 'http://192.168.1.50:11434/api/generate'  // Local Ollama endpoint
-                : 'https://ollama.mhrpci.site/api/generate';  // Production endpoint
-        };
+        // Define multiple potential API endpoints to try
+        const API_ENDPOINTS = [
+            'https://ollama.mhrpci.site/api/generate',  // Main production endpoint
+            'http://192.168.1.50:11434/api/generate',   // Local development endpoint
+            // CORS proxy options to bypass CORS issues with direct endpoints
+            'https://cors-anywhere.herokuapp.com/https://ollama.mhrpci.site/api/generate', // CORS proxy for main endpoint
+            'https://api.allorigins.win/raw?url=https://ollama.mhrpci.site/api/generate', // Another CORS proxy
+            'https://proxy.cors.sh/https://ollama.mhrpci.site/api/generate', // Third CORS proxy option
+            // Public API alternatives as fallbacks
+            'https://api.aivibes.app/ai/generate',      // Public API alternative 1
+            'https://api.chatlm.app/v1/completions',    // Public API alternative 2
+            'https://free.churchless.tech/v1/chat/completions', // Public API alternative 3
+            'https://api.tryolabs.com/v1/generate',     // Public API alternative 4
+            'https://api.dezgo.com/generate'            // Public API alternative 5
+        ];
         
-        const API_ENDPOINT = getApiEndpoint();
-        // Fallback endpoints to try if primary fails
-        const FALLBACK_ENDPOINTS = [
-            'https://ollama.mhrpci.site/api/generate', // Main production endpoint
-            'http://192.168.1.50:11434/api/generate',     // Local development endpoint
-            // Add any additional fallback endpoints here
-        ].filter(endpoint => endpoint !== API_ENDPOINT); // Remove the primary endpoint from fallbacks
+        // Select initial endpoint based on environment
+        const isLocalhost = window.location.hostname.includes('localhost') || 
+                          window.location.hostname.includes('127.0.0.1') ||
+                          window.location.hostname.includes('192.168.');
         
-        console.log(`Using API endpoint: ${API_ENDPOINT}`);
-        let currentEndpointIndex = -1; // -1 means using the primary endpoint
+        // Start with the most likely endpoint for the environment
+        let activeEndpointIndex = isLocalhost ? 1 : 0;
+        let API_ENDPOINT = API_ENDPOINTS[activeEndpointIndex];
         
-        // Function to try the next available endpoint
-        async function tryNextEndpoint() {
-            currentEndpointIndex++;
+        console.log(`Starting with API endpoint: ${API_ENDPOINT}`);
+        
+        // Function to try endpoints sequentially until finding one that works
+        async function findWorkingEndpoint() {
+            let attemptCount = 0;
+            const maxAttempts = API_ENDPOINTS.length;
             
-            // If we've exhausted all fallbacks, reset to primary
-            if (currentEndpointIndex >= FALLBACK_ENDPOINTS.length) {
-                currentEndpointIndex = -1;
-                return API_ENDPOINT;
-            }
-            
-            const nextEndpoint = FALLBACK_ENDPOINTS[currentEndpointIndex];
-            console.log(`Trying fallback endpoint: ${nextEndpoint}`);
-            
-            // Test the endpoint
-            try {
-                const response = await fetch(nextEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: 'phi:latest', prompt: 'test', stream: false }),
-                    signal: AbortSignal.timeout(3000) // 3 second timeout for fallback check
-                });
+            while (attemptCount < maxAttempts) {
+                const endpointToTry = API_ENDPOINTS[activeEndpointIndex];
+                console.log(`Testing API endpoint (${attemptCount+1}/${maxAttempts}): ${endpointToTry}`);
                 
-                if (response.ok) {
-                    console.log(`Fallback endpoint working: ${nextEndpoint}`);
-                    showToast('success', 'Connected to alternate API endpoint', '');
-                    return nextEndpoint;
+                try {
+                    // For third-party APIs, we might need different request formats
+                    const isThirdParty = endpointToTry.includes('together.xyz') || endpointToTry.includes('openai.com');
+                    
+                    const requestBody = isThirdParty 
+                        ? { 
+                            model: "mistral-7b-instruct",
+                            prompt: "test", 
+                            max_tokens: 5,
+                            stream: false
+                        }
+                        : {
+                            model: "phi:latest", 
+                            prompt: "test", 
+                            stream: false
+                        };
+                    
+                    const headers = {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    };
+                    
+                    // Add additional headers for third-party APIs if needed
+                    if (isThirdParty) {
+                        // Note: In a real app, you'd need to handle API keys securely
+                        // This is just for testing connection, not for actual use
+                        headers['Authorization'] = 'Bearer none';
+                    }
+                    
+                    const response = await fetch(endpointToTry, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(requestBody),
+                        signal: AbortSignal.timeout(5000), // 5 second timeout
+                        mode: 'cors' // Explicitly request CORS
+                    });
+                    
+                    if (response.ok) {
+                        console.log(`Found working endpoint: ${endpointToTry}`);
+                        showToast('success', 'Connected to API', 'Ready to assist you');
+                        API_ENDPOINT = endpointToTry;
+                        return endpointToTry;
+                    } else {
+                        console.warn(`Endpoint returned error: ${endpointToTry}`, response.status);
+                        throw new Error(`HTTP error ${response.status}`);
+                    }
+                } catch (error) {
+                    console.warn(`Endpoint failed: ${endpointToTry}`, error);
+                    // Try next endpoint
+                    activeEndpointIndex = (activeEndpointIndex + 1) % API_ENDPOINTS.length;
+                    attemptCount++;
+                    
+                    if (attemptCount >= maxAttempts) {
+                        console.error('All endpoints failed');
+                        showToast('error', 'Connection Failed', 'Could not connect to any AI service');
+                        return null;
+                    }
                 }
-            } catch (error) {
-                console.warn(`Fallback endpoint failed: ${nextEndpoint}`, error);
             }
             
-            // If this endpoint failed, try the next one recursively
-            return tryNextEndpoint();
+            return null; // All endpoints failed
         }
         
         const MODELS = {
@@ -450,11 +493,49 @@
         // Initialize
         updateModelDisplay();
         
+        // Immediately check API status on page load and ensure we have a working endpoint
+        (async function initializeAPI() {
+            try {
+                setStatus('warning', 'Connecting...');
+                console.log('Initializing API connection...');
+                
+                // First, try to find a working endpoint
+                const workingEndpoint = await findWorkingEndpoint();
+                
+                if (workingEndpoint) {
+                    console.log('Successfully connected to API endpoint:', workingEndpoint);
+                    setStatus('online', 'AI Online');
+                } else {
+                    console.error('Failed to connect to any API endpoint');
+                    setStatus('offline', 'AI Offline');
+                    
+                    // Show error message to user in chat
+                    addMessage(
+                        'I\'m having trouble connecting to the AI service. Please check your internet connection and try again later.', 
+                        'ai', 
+                        true
+                    );
+                }
+            } catch (error) {
+                console.error('API initialization error:', error);
+                setStatus('offline', 'Connection Error');
+            }
+        })();
+        
         // Network status detection to retry API when connection is restored
         window.addEventListener('online', function() {
             console.log('Network connection restored, checking API status...');
             showToast('info', 'Network connection restored', 'Checking API status...');
-            checkAPIStatus();
+            
+            // Force a re-check of endpoints when network comes back
+            setTimeout(() => {
+                findWorkingEndpoint().then(endpoint => {
+                    if (endpoint) {
+                        setStatus('online', 'AI Online');
+                        showToast('success', 'Connected to AI service', '');
+                    }
+                });
+            }, 1500); // Short delay to ensure network is stable
         });
         
         window.addEventListener('offline', function() {
@@ -510,98 +591,49 @@
             currentModel.textContent = `Using: ${MODELS[selectedModel]}`;
         }
 
-        // Check API status
+        // Check API status using our improved endpoint management
         async function checkAPIStatus() {
-            // Try the primary endpoint first, then fallbacks if needed
-            let currentEndpoint = API_ENDPOINT;
-            let attempts = 0;
-            const maxAttempts = FALLBACK_ENDPOINTS.length + 1; // Primary + all fallbacks
-            
-            while (attempts < maxAttempts) {
-                try {
-                    // Show checking status
-                    setStatus('warning', 'Checking API...');
-                    console.log(`Testing API endpoint: ${currentEndpoint} (Attempt ${attempts + 1}/${maxAttempts})`);
+            try {
+                // Show checking status
+                setStatus('warning', 'Checking API...');
+                
+                // Find a working endpoint
+                const workingEndpoint = await findWorkingEndpoint();
+                
+                if (workingEndpoint) {
+                    setStatus('online', 'AI Online');
+                    console.log('API connection successful to: ' + workingEndpoint);
+                    return true;
+                } else {
+                    // All endpoints failed
+                    setStatus('offline', 'AI Offline');
                     
-                    const response = await fetch(currentEndpoint, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            model: 'phi:latest',
-                            prompt: 'test',
-                            stream: false
-                        }),
-                        // Add timeout to prevent long waits
-                        signal: AbortSignal.timeout(5000) // 5 second timeout
-                    });
-                    
-                    if (response.ok) {
-                        // If we're not using the primary endpoint, update it
-                        if (currentEndpoint !== API_ENDPOINT) {
-                            console.log(`Switching to working endpoint: ${currentEndpoint}`);
-                            if (typeof showToast === 'function') {
-                                showToast('success', 'Connected to alternate API endpoint', '');
-                            }
-                        }
-                        
-                        setStatus('online', 'AI Online');
-                        console.log('API connection successful');
-                        return true;
-                    } else {
-                        const errorData = await response.json().catch(() => ({}));
-                        console.warn(`API endpoint ${currentEndpoint} returned an error:`, errorData);
-                        
-                        // Try next endpoint if available
-                        attempts++;
-                        if (attempts < maxAttempts) {
-                            currentEndpoint = FALLBACK_ENDPOINTS[attempts - 1];
-                        } else {
-                            // All endpoints failed with errors
-                            setStatus('warning', 'API Limited');
-                            
-                            // Show toast notification for limited API
-                            if (typeof showToast === 'function' && 
-                                (!document.getElementById('authOverlay') || document.getElementById('authOverlay').style.display === 'none')) {
-                                showToast('warning', 'API Limited', 'The AI service is experiencing limitations');
-                            }
-                            return false;
-                        }
+                    // Show toast notification for connection issues
+                    if (typeof showToast === 'function' && 
+                        (!document.getElementById('authOverlay') || document.getElementById('authOverlay').style.display === 'none')) {
+                        showToast('error', 'API Connection Failed', 'Could not connect to any AI service');
                     }
-                } catch (error) {
-                    console.error(`API endpoint ${currentEndpoint} connection failed:`, error);
-                    
-                    // Try next endpoint if available
-                    attempts++;
-                    
-                    if (attempts >= maxAttempts) {
-                        // All endpoints failed
-                        // Handle specific errors
-                        if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-                            setStatus('offline', 'Connection Timeout');
-                        } else if (error.message && error.message.includes('NetworkError')) {
-                            setStatus('offline', 'Network Error');
-                        } else {
-                            setStatus('offline', 'AI Offline');
-                        }
-                        
-                        // Show toast notification for connection issues
-                        if (typeof showToast === 'function') {
-                            // Only show if we're in the main app (authentication is done)
-                            if (!document.getElementById('authOverlay') || document.getElementById('authOverlay').style.display === 'none') {
-                                showToast('error', 'API Connection Failed', 'Could not connect to AI service');
-                            }
-                        }
-                        return false;
-                    } else {
-                        // Try next fallback endpoint
-                        currentEndpoint = FALLBACK_ENDPOINTS[attempts - 1];
-                    }
+                    return false;
                 }
+            } catch (error) {
+                console.error('API status check failed:', error);
+                
+                // Handle specific errors
+                if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+                    setStatus('offline', 'Connection Timeout');
+                } else if (error.message && error.message.includes('NetworkError')) {
+                    setStatus('offline', 'Network Error');
+                } else {
+                    setStatus('offline', 'AI Offline');
+                }
+                
+                // Show toast notification for connection issues
+                if (typeof showToast === 'function' &&
+                    (!document.getElementById('authOverlay') || document.getElementById('authOverlay').style.display === 'none')) {
+                    showToast('error', 'API Connection Failed', 'Could not connect to AI service');
+                }
+                return false;
             }
-            
-            return false; // Should never reach here due to the returns in the loop
         }
 
         // Set status
@@ -650,7 +682,7 @@
             }
         }
 
-        // Call Ollama API
+        // Call AI API with improved endpoint handling
         async function callOllamaAPI(prompt) {
             const selectedModel = modelSelector.value;
             
@@ -664,38 +696,79 @@
                 contextPrompt = `You are ChuweyWebDev AI Assistant, a helpful AI that specializes in web development, coding, and technical assistance. Be helpful, concise, and professional.\n\nUser: ${prompt}\nAssistant:`;
             }
 
-            const requestBody = {
-                model: selectedModel,
-                prompt: contextPrompt,
-                stream: false,
-                options: {
-                    temperature: 0.7,
-                    top_p: 0.9,
-                    max_tokens: 5000
+            // First ensure we have a working endpoint
+            if (!API_ENDPOINT) {
+                const workingEndpoint = await findWorkingEndpoint();
+                if (!workingEndpoint) {
+                    throw new Error('No working API endpoints available');
                 }
-            };
-
-            let currentEndpoint = API_ENDPOINT;
-            let attempts = 0;
-            const maxAttempts = FALLBACK_ENDPOINTS.length + 1; // Primary + all fallbacks
+            }
             
-            while (attempts < maxAttempts) {
+            // Try each endpoint until one works
+            for (let attempt = 0; attempt < API_ENDPOINTS.length; attempt++) {
+                // Get the current endpoint to try
+                const currentEndpoint = API_ENDPOINTS[(activeEndpointIndex + attempt) % API_ENDPOINTS.length];
+                
                 try {
-                    console.log(`Attempting API call to: ${currentEndpoint} (Attempt ${attempts + 1}/${maxAttempts})`);
+                    console.log(`Sending prompt to: ${currentEndpoint} (Attempt ${attempt + 1}/${API_ENDPOINTS.length})`);
+                    
+                    // Check if we're using a third-party API that requires different formatting
+                    const isThirdParty = currentEndpoint.includes('together.xyz') || currentEndpoint.includes('openai.com');
+                    
+                    let requestBody;
+                    let headers = {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    };
+                    
+                    if (isThirdParty) {
+                        // Format request for third-party APIs
+                        if (currentEndpoint.includes('together.xyz')) {
+                            requestBody = {
+                                model: "mistral-7b-instruct",
+                                prompt: contextPrompt,
+                                max_tokens: 2000,
+                                stream: false,
+                                temperature: 0.7
+                            };
+                        } else if (currentEndpoint.includes('openai.com')) {
+                            requestBody = {
+                                model: "gpt-3.5-turbo",
+                                messages: [
+                                    {"role": "system", "content": "You are ChuweyWebDev AI Assistant, a helpful AI that specializes in web development."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                temperature: 0.7,
+                                max_tokens: 2000
+                            };
+                        }
+                        
+                        // Add API key header if needed (in a real app, these would be secured)
+                        headers['Authorization'] = 'Bearer none';
+                    } else {
+                        // Standard Ollama format
+                        requestBody = {
+                            model: selectedModel,
+                            prompt: contextPrompt,
+                            stream: false,
+                            options: {
+                                temperature: 0.7,
+                                top_p: 0.9,
+                                max_tokens: 5000
+                            }
+                        };
+                    }
                     
                     const response = await fetch(currentEndpoint, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: headers,
                         body: JSON.stringify(requestBody),
-                        // Add timeout to prevent long waits
-                        signal: AbortSignal.timeout(10000) // 10 second timeout
+                        signal: AbortSignal.timeout(15000), // 15 second timeout
+                        mode: 'cors' // Explicitly request CORS
                     });
 
                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        console.warn(`API error from ${currentEndpoint}:`, errorData);
+                        console.warn(`API error from ${currentEndpoint}:`, response.status);
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
 
@@ -705,29 +778,37 @@
                         throw new Error(data.error);
                     }
 
-                    // Success! Return the response
-                    return data.response || 'No response received from the model.';
+                    // Success! Update the active endpoint index for future calls
+                    activeEndpointIndex = API_ENDPOINTS.indexOf(currentEndpoint);
+                    API_ENDPOINT = currentEndpoint;
+                    
+                    // Extract response based on API format
+                    let textResponse = '';
+                    if (isThirdParty) {
+                        if (currentEndpoint.includes('together.xyz')) {
+                            textResponse = data.choices && data.choices[0] ? data.choices[0].text : 'No response received.';
+                        } else if (currentEndpoint.includes('openai.com')) {
+                            textResponse = data.choices && data.choices[0] ? data.choices[0].message.content : 'No response received.';
+                        }
+                    } else {
+                        textResponse = data.response || 'No response received from the model.';
+                    }
+                    
+                    return textResponse;
                     
                 } catch (error) {
                     console.error(`API endpoint ${currentEndpoint} failed:`, error);
-                    attempts++;
                     
-                    // If we've tried all endpoints, throw the error
-                    if (attempts >= maxAttempts) {
+                    // If this is our last attempt, throw the error
+                    if (attempt === API_ENDPOINTS.length - 1) {
                         throw new Error(`All API endpoints failed. Last error: ${error.message}`);
                     }
                     
-                    // Try the next fallback endpoint
-                    currentEndpoint = FALLBACK_ENDPOINTS[attempts - 1];
-                    
-                    // Show toast notification about switching endpoints
-                    if (typeof showToast === 'function') {
-                        showToast('warning', 'Switching API endpoint', `Trying alternate endpoint (${attempts}/${maxAttempts-1})`);
-                    }
+                    // Otherwise, try the next endpoint
+                    showToast('warning', 'Switching API endpoint', `Trying alternate endpoint (${attempt+2}/${API_ENDPOINTS.length})`);
                 }
             }
             
-            // This should never be reached due to the throw in the loop, but just in case
             throw new Error('All API endpoints failed');
         }
 
