@@ -3,33 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Professional AI chat assistant with code playground capabilities">
-    <title>ChuweyWebDev AI Assistant</title>
+    <meta name="description" content="Professional AI chat assistant with multiple model support">
+    <title>AI Assistant</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/html.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/php.min.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
     <style>
         :root {
-            --primary-color: #3b82f6;
-            --primary-hover: #2563eb;
-            --dark-bg: #0f172a;
-            --dark-secondary: #1e293b;
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --dark-bg: #111827;
+            --dark-secondary: #1f2937;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .sidebar {
+            width: 280px;
+            transition: transform 0.3s ease;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                z-index: 50;
+                transform: translateX(-100%);
+            }
+            
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            
+            .overlay {
+                position: fixed;
+                inset: 0;
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 40;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.3s ease;
+            }
+            
+            .overlay.active {
+                opacity: 1;
+                pointer-events: auto;
+            }
         }
         
         .chat-container {
-            height: calc(100vh - 140px);
-        }
-        
-        @media (min-width: 768px) {
-            .chat-container {
-                height: calc(100vh - 160px);
-            }
+            height: calc(100vh - 80px);
         }
         
         .typing-indicator {
@@ -90,221 +117,195 @@
             line-height: 1.5;
         }
         
-        .code-actions {
-            position: absolute;
-            top: 0.5rem;
-            right: 0.5rem;
-            display: flex;
-            gap: 0.5rem;
-        }
-        
-        .code-actions button {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        
-        .code-actions button:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-        
-        .playground {
-            display: flex;
-            flex-direction: column;
-            border: 1px solid #374151;
-            border-radius: 0.5rem;
-            overflow: hidden;
-            margin: 1rem 0;
-        }
-        
-        .playground-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.5rem 1rem;
-            background-color: #1f2937;
-            color: white;
-        }
-        
-        .playground-tabs {
-            display: flex;
-            gap: 0.5rem;
-        }
-        
-        .playground-tab {
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.25rem;
-            cursor: pointer;
-        }
-        
-        .playground-tab.active {
-            background-color: var(--primary-color);
-        }
-        
-        .playground-content {
-            display: flex;
-            height: 400px;
-        }
-        
-        .playground-editor {
-            flex: 1;
-            height: 100%;
-            resize: none;
-            padding: 1rem;
-            font-family: 'Fira Code', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-            font-size: 0.875rem;
-            line-height: 1.5;
-            tab-size: 2;
-            background-color: #282c34;
-            color: #abb2bf;
-            border: none;
-            overflow: auto;
-        }
-        
-        .playground-preview {
-            flex: 1;
-            height: 100%;
-            overflow: auto;
-            background-color: white;
-            border-left: 1px solid #374151;
-        }
-        
-        .dark .playground-preview {
-            background-color: #1a1a1a;
-            color: #f3f4f6;
-        }
-        
         /* ScrollBar Styles */
         ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
         }
         
         ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.1);
+            background: rgba(0, 0, 0, 0.05);
         }
         
         ::-webkit-scrollbar-thumb {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 3px;
         }
         
         .dark ::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
         }
         
         .dark ::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .model-selector-item {
+            transition: all 0.2s ease;
+        }
+        
+        .model-selector-item.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .model-selector-item:not(.active):hover {
+            background-color: rgba(37, 99, 235, 0.1);
+        }
+        
+        .textarea-container {
+            position: relative;
+        }
+        
+        .textarea-container textarea {
+            resize: none;
+            max-height: 200px;
+            overflow-y: auto;
+            padding-right: 40px;
+        }
+        
+        .send-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
         }
     </style>
 </head>
-<body class="h-full bg-gray-50 dark:bg-dark-900 transition-colors duration-200 text-gray-900 dark:text-gray-100">
-    <div class="flex flex-col h-full max-w-5xl mx-auto">
-        <!-- Header -->
-        <header class="bg-white dark:bg-gray-800 shadow-sm py-4 px-6 flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <img src="images/logo.png" alt="ChuweyWebDev AI Logo" class="w-10 h-10 rounded-full object-contain dark:invert">
-                <div>
-                    <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100">ChuweyWebDev AI</h1>
-                    <p class="text-sm text-gray-600 dark:text-gray-300">Professional AI Solutions</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <button id="clear-chat" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300" title="Clear chat">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" title="Toggle dark mode">
-                <i class="fas fa-moon text-gray-600 dark:text-yellow-300 dark:hidden"></i>
-                <i class="fas fa-sun text-gray-300 hidden dark:inline-block"></i>
-            </button>
-            </div>
-        </header>
+<body class="h-full bg-gray-50 dark:bg-gray-900 transition-colors duration-200 text-gray-900 dark:text-gray-100">
+    <!-- Mobile Menu Overlay -->
+    <div class="overlay" id="overlay"></div>
 
-        <!-- Chat Container -->
-        <div class="chat-container overflow-y-auto p-4 space-y-4 flex-1" id="chat-container">
-            <!-- Welcome Message -->
-            <div class="flex justify-start">
-                <div class="max-w-[80%] md:max-w-[70%] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-lg rounded-tl-none message-enter">
-                    <p class="dark:text-gray-100">Hello! I'm ChuweyWebDev AI. How can I assist with your professional needs today?</p>
+    <div class="flex h-full">
+        <!-- Sidebar -->
+        <aside class="sidebar bg-white dark:bg-gray-800 shadow-lg flex flex-col">
+            <!-- Logo Area -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 bg-blue-600 text-white rounded-md flex items-center justify-center">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <h1 class="text-lg font-semibold">AI Assistant</h1>
+                </div>
+                <!-- Mobile Close Button -->
+                <button id="close-sidebar" class="md:hidden text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Model Selector -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Select Model</h2>
+                <div class="space-y-2" id="model-selector">
+                    <div class="model-selector-item active p-3 rounded-lg cursor-pointer flex items-center gap-3" data-model="phi:latest">
+                        <div class="w-8 h-8 bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 rounded-full flex items-center justify-center">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium">Phi</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Lightweight assistant</div>
+                        </div>
+                    </div>
+                    
+                    <div class="model-selector-item p-3 rounded-lg cursor-pointer flex items-center gap-3" data-model="deepseek-coder:6.7b-instruct">
+                        <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 rounded-full flex items-center justify-center">
+                            <i class="fas fa-code"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium">DeepSeek Coder</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Code completion</div>
+                        </div>
+                    </div>
+                    
+                    <div class="model-selector-item p-3 rounded-lg cursor-pointer flex items-center gap-3" data-model="mistral:latest">
+                        <div class="w-8 h-8 bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300 rounded-full flex items-center justify-center">
+                            <i class="fas fa-brain"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium">Mistral</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">General purpose</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Input Area -->
-        <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
-            <form id="chat-form" class="flex flex-col gap-2">
-                <div class="flex gap-2">
-                    <select id="model-select" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-                    <option value="phi" selected>Phi (Default)</option>
-                    <option value="deepseek-coder:6.7b-instruct">DeepSeek Coder (6.7B)</option>
-                        <option value="mistral">Mistral (7B)</option>
-                        <option value="llama2">Llama 2 (13B)</option>
-                </select>
-                <input 
-                    id="message-input" 
-                    type="text" 
-                    placeholder="Type your message..." 
-                        class="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                    autocomplete="off"
-                >
-                <button 
-                    type="submit" 
-                        id="send-button"
-                        class="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center transition-colors"
-                        title="Send message"
-                >
-                    <i class="fas fa-paper-plane"></i>
+            
+            <!-- Settings / Controls -->
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-gray-500 dark:text-gray-400">Theme</span>
+                    <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+                        <i class="fas fa-moon dark:hidden"></i>
+                        <i class="fas fa-sun hidden dark:inline-block"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-4 mt-auto text-center text-xs text-gray-500 dark:text-gray-400">
+                <button id="clear-chat" class="w-full py-2 px-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition-colors">
+                    <i class="fas fa-trash-alt mr-2"></i>Clear Chat
                 </button>
+                <div class="mt-4">
+                    &copy; 2023 AI Assistant
                 </div>
-                <div class="flex justify-end items-center text-xs text-gray-500 dark:text-gray-400 px-1">
-                    <p>AI Assistant may produce inaccurate information about people, places, or facts.</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <!-- Mobile Header -->
+            <header class="md:hidden bg-white dark:bg-gray-800 shadow-sm p-4 flex items-center justify-between">
+                <button id="open-sidebar" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 class="text-lg font-semibold">AI Assistant</h1>
+                <div class="w-6"></div> <!-- Spacer for alignment -->
+            </header>
+            
+            <!-- Chat Area -->
+            <div class="flex-1 overflow-hidden flex flex-col">
+                <!-- Messages Container -->
+                <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-6">
+                    <!-- Welcome Message -->
+                    <div class="flex justify-start">
+                        <div class="max-w-[85%] md:max-w-[75%] bg-white dark:bg-gray-800 shadow-sm p-4 rounded-2xl rounded-tl-none message-enter">
+                            <p class="dark:text-gray-100">Hello! I'm your AI assistant. How can I help you today?</p>
+                        </div>
+                    </div>
                 </div>
-            </form>
-        </div>
+                
+                <!-- Input Area -->
+                <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+                    <form id="chat-form" class="flex flex-col gap-3">
+                        <div class="textarea-container">
+                            <textarea 
+                                id="message-input" 
+                                placeholder="Type your message..." 
+                                class="w-full rounded-2xl border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white p-4 pr-12"
+                                rows="1"
+                            ></textarea>
+                            <button 
+                                type="submit" 
+                                id="send-button"
+                                class="send-button w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center transition-colors"
+                                title="Send message"
+                                disabled
+                            >
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="flex justify-end items-center text-xs text-gray-500 dark:text-gray-400 px-1">
+                            <span id="current-model-display">Using: Phi</span>
+                            <span class="mx-2">•</span>
+                            <span>AI Assistant may produce inaccurate information</span>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
     </div>
-
-    <!-- Templates (Hidden) -->
-    <template id="code-block-template">
-        <div class="code-block">
-            <div class="code-actions">
-                <button class="copy-btn" title="Copy code"><i class="fas fa-copy"></i></button>
-                <button class="playground-btn" title="Open in playground"><i class="fas fa-play"></i></button>
-            </div>
-            <pre><code></code></pre>
-        </div>
-    </template>
-
-    <template id="playground-template">
-        <div class="playground">
-            <div class="playground-header">
-                <div class="playground-tabs">
-                    <div class="playground-tab active" data-tab="editor">Editor</div>
-                    <div class="playground-tab" data-tab="preview">Preview</div>
-                </div>
-                <div class="playground-actions">
-                    <button class="update-preview" title="Update preview"><i class="fas fa-sync-alt"></i></button>
-                    <button class="copy-code" title="Copy code"><i class="fas fa-copy"></i></button>
-                    <button class="close-playground" title="Close playground"><i class="fas fa-times"></i></button>
-                </div>
-            </div>
-            <div class="playground-content">
-                <textarea class="playground-editor"></textarea>
-                <div class="playground-preview hidden"></div>
-            </div>
-        </div>
-    </template>
 
     <!-- Typing Indicator (Hidden) -->
     <div id="typing-indicator" class="flex justify-start hidden">
-        <div class="max-w-[80%] md:max-w-[70%] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 rounded-lg rounded-tl-none">
+        <div class="max-w-[85%] md:max-w-[75%] bg-white dark:bg-gray-800 shadow-sm p-3 rounded-2xl rounded-tl-none">
             <div class="typing-indicator">
                 <span></span>
                 <span></span>
@@ -320,17 +321,44 @@
             const clearChat = document.getElementById('clear-chat');
             const chatForm = document.getElementById('chat-form');
             const messageInput = document.getElementById('message-input');
-            const modelSelect = document.getElementById('model-select');
             const sendButton = document.getElementById('send-button');
             const chatContainer = document.getElementById('chat-container');
             const typingIndicator = document.getElementById('typing-indicator');
-            
-            // Templates
-            const codeBlockTemplate = document.getElementById('code-block-template');
-            const playgroundTemplate = document.getElementById('playground-template');
+            const modelSelector = document.getElementById('model-selector');
+            const modelItems = document.querySelectorAll('.model-selector-item');
+            const currentModelDisplay = document.getElementById('current-model-display');
+            const openSidebar = document.getElementById('open-sidebar');
+            const closeSidebar = document.getElementById('close-sidebar');
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('overlay');
             
             // State
             let chatHistory = [];
+            let currentModel = "phi:latest";
+            
+            // Initialize textarea auto-resize
+            const textarea = document.getElementById('message-input');
+            textarea.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight < 200 ? this.scrollHeight : 200) + 'px';
+                
+                // Enable/disable send button based on content
+                sendButton.disabled = this.value.trim() === '';
+            });
+            
+            // Mobile sidebar controls
+            openSidebar.addEventListener('click', () => {
+                sidebar.classList.add('open');
+                overlay.classList.add('active');
+            });
+            
+            function closeSidebarFunc() {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+            }
+            
+            closeSidebar.addEventListener('click', closeSidebarFunc);
+            overlay.addEventListener('click', closeSidebarFunc);
             
             // Theme toggle
             themeToggle.addEventListener('click', () => {
@@ -347,15 +375,63 @@
             // Clear chat
             clearChat.addEventListener('click', () => {
                 if (confirm('Are you sure you want to clear the chat?')) {
-                    // Keep only the welcome message
                     chatContainer.innerHTML = '';
-                    addMessage('Hello! I\'m ChuweyWebDev AI. How can I assist with your professional needs today?', 'ai');
+                    addMessage('Hello! I\'m your AI assistant. How can I help you today?', 'ai');
                     chatHistory = [];
                     localStorage.removeItem('chatHistory');
                 }
             });
             
-
+            // Model selector
+            modelItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    // Update active state
+                    modelItems.forEach(modelItem => modelItem.classList.remove('active'));
+                    item.classList.add('active');
+                    
+                    // Update current model
+                    currentModel = item.dataset.model;
+                    
+                    // Save preference
+                    localStorage.setItem('selectedModel', currentModel);
+                    
+                    // Update display
+                    updateModelDisplay();
+                    
+                    // Close sidebar on mobile
+                    if (window.innerWidth < 768) {
+                        closeSidebarFunc();
+                    }
+                });
+            });
+            
+            // Update model display
+            function updateModelDisplay() {
+                let displayName = "Phi";
+                if (currentModel.includes("deepseek")) {
+                    displayName = "DeepSeek Coder";
+                } else if (currentModel.includes("mistral")) {
+                    displayName = "Mistral";
+                }
+                currentModelDisplay.textContent = `Using: ${displayName}`;
+            }
+            
+            // Load model preference
+            const savedModel = localStorage.getItem('selectedModel');
+            if (savedModel) {
+                currentModel = savedModel;
+                
+                // Update UI
+                modelItems.forEach(item => {
+                    if (item.dataset.model === savedModel) {
+                        item.classList.add('active');
+                    } else {
+                        item.classList.remove('active');
+                    }
+                });
+                
+                updateModelDisplay();
+            }
             
             // Load chat history
             function loadChatHistory() {
@@ -365,9 +441,13 @@
                         chatHistory = JSON.parse(savedHistory);
                         chatContainer.innerHTML = ''; // Clear default welcome message
                         
-                        chatHistory.forEach(msg => {
-                            addMessage(msg.text, msg.sender, msg.timestamp, true);
-                        });
+                        if (chatHistory.length === 0) {
+                            addMessage('Hello! I\'m your AI assistant. How can I help you today?', 'ai');
+                        } else {
+                            chatHistory.forEach(msg => {
+                                addMessage(msg.text, msg.sender, true);
+                            });
+                        }
                         
                         // Scroll to bottom after loading history
                         scrollToBottom();
@@ -391,12 +471,14 @@
             chatForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const message = messageInput.value.trim();
-                const model = modelSelect.value;
                 
                 if (message) {
                     // Add user message
                     addMessage(message, 'user');
+                    
+                    // Reset textarea height
                     messageInput.value = '';
+                    messageInput.style.height = 'auto';
                     
                     // Disable input and button while processing
                     messageInput.disabled = true;
@@ -407,40 +489,52 @@
                     showTypingIndicator();
 
                     try {
-                        const response = await fetch('https://ollama.mhrpci.site/api/generate', {
+                        // API endpoint - Replace with your actual endpoint
+                        const apiUrl = 'https://yourdomain.com/api/generate';
+                        
+                        const response = await fetch(apiUrl, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Accept': 'application/json'
                             },
                             body: JSON.stringify({
-                                model: model,
+                                model: currentModel,
                                 prompt: message,
                                 stream: false
                             })
                         });
 
                         if (!response.ok) {
-                            const errorData = await response.json();
-                            throw new Error(errorData.error || `API request failed with status ${response.status}`);
+                            throw new Error(`API request failed with status ${response.status}`);
                         }
 
                         const data = await response.json();
                         hideTypingIndicator();
                         
-                        if (data.response) {
+                        if (data && data.response) {
                             addMessage(data.response, 'ai');
                         } else {
-                            addMessage("I couldn't generate a response. Please try again.", 'ai');
+                            throw new Error("Invalid response format from API");
                         }
                     } catch (error) {
                         console.error('API Error:', error);
                         hideTypingIndicator();
-                        addMessage(`Sorry, there was an error: ${error.message}. Please try again later.`, 'ai');
+                        
+                        // Show friendly error message
+                        let errorMessage = "Sorry, I couldn't respond right now. Please try again later.";
+                        
+                        if (error.message.includes('failed with status')) {
+                            errorMessage = "Unable to reach the assistant service. Please check your connection.";
+                        } else if (error.message.includes('Invalid response')) {
+                            errorMessage = "Received an invalid response from the service. Please try again.";
+                        }
+                        
+                        addMessage(errorMessage, 'ai');
+                        
                     } finally {
                         // Re-enable input and button
                         messageInput.disabled = false;
-                        sendButton.disabled = false;
                         sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
                         messageInput.focus();
                     }
@@ -457,6 +551,9 @@
             // Hide typing indicator
             function hideTypingIndicator() {
                 typingIndicator.classList.add('hidden');
+                if (typingIndicator.parentNode === chatContainer) {
+                    chatContainer.removeChild(typingIndicator);
+                }
             }
             
             // Scroll to bottom of chat
@@ -465,9 +562,8 @@
             }
             
             // Add message to chat
-            function addMessage(text, sender, timestamp = new Date().toISOString(), skipHistory = false) {
+            function addMessage(text, sender, skipHistory = false) {
                 // Clone typing indicator and remove it temporarily
-                const typingClone = typingIndicator.cloneNode(true);
                 if (typingIndicator.parentNode === chatContainer) {
                     chatContainer.removeChild(typingIndicator);
                 }
@@ -475,235 +571,69 @@
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `flex justify-${sender === 'user' ? 'end' : 'start'} message-enter`;
                 
+                const timestampText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
                 const messageBubble = document.createElement('div');
-                messageBubble.className = `max-w-xs md:max-w-md lg:max-w-lg p-4 rounded-lg rounded-t${sender === 'user' ? 'r' : 'l'}-none ${
+                messageBubble.className = `relative max-w-[85%] md:max-w-[75%] p-4 rounded-2xl ${
                     sender === 'user' 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                        ? 'bg-blue-500 text-white rounded-br-none' 
+                        : 'bg-white dark:bg-gray-800 shadow-sm rounded-tl-none'
                 }`;
                 
-                // Process text for code blocks
-                const processedText = processMessageText(text, sender);
+                // Process markdown-style formatting
+                const processedText = processMessageText(text);
+                
+                // Add timestamp
+                const timestamp = document.createElement('div');
+                timestamp.className = `absolute bottom-1 ${sender === 'user' ? 'right-2' : 'left-2'} text-xs opacity-70`;
+                timestamp.textContent = timestampText;
+                
+                // Set content
                 messageBubble.innerHTML = processedText;
+                messageBubble.appendChild(timestamp);
                 
                 messageDiv.appendChild(messageBubble);
                 chatContainer.appendChild(messageDiv);
-                
-                // Initialize highlight.js on code blocks
-                messageBubble.querySelectorAll('pre code').forEach((block) => {
-                    hljs.highlightElement(block);
-                });
-                
-                // Setup code block buttons
-                messageBubble.querySelectorAll('.code-block').forEach((codeBlock) => {
-                    const copyBtn = codeBlock.querySelector('.copy-btn');
-                    const playgroundBtn = codeBlock.querySelector('.playground-btn');
-                    const codeElement = codeBlock.querySelector('code');
-                    
-                    copyBtn.addEventListener('click', () => {
-                        copyToClipboard(codeElement.textContent);
-                        showToast('Code copied to clipboard!');
-                    });
-                    
-                    playgroundBtn.addEventListener('click', () => {
-                        openPlayground(codeElement.textContent, detectLanguage(codeElement.className));
-                    });
-                });
                 
                 // Add message to history if not loading from history
                 if (!skipHistory) {
                     chatHistory.push({
                         text: text,
                         sender: sender,
-                        timestamp: timestamp
+                        timestamp: new Date().toISOString()
                     });
                     saveChatHistory();
                 }
-                
-                // Add back typing indicator
-                chatContainer.appendChild(typingClone);
                 
                 // Scroll to bottom
                 scrollToBottom();
             }
             
-            // Process message text for code blocks
-            function processMessageText(text, sender) {
-                // Regex to detect code blocks (```language code ```)
-                const codeBlockRegex = /```([a-zA-Z]*)\n([\s\S]*?)```/g;
+            // Process message text for formatting
+            function processMessageText(text) {
+                let result = text;
                 
-                // Replace code blocks with our custom code block template
-                let result = text.replace(codeBlockRegex, (match, language, code) => {
-                    const codeBlockClone = codeBlockTemplate.content.cloneNode(true);
-                    const codeElement = codeBlockClone.querySelector('code');
-                    
-                    // Set language class for highlight.js
-                    if (language) {
-                        codeElement.className = `language-${language.toLowerCase()}`;
-                    }
-                    
-                    // Set code content
-                    codeElement.textContent = code.trim();
-                    
-                    // Convert DOM to string
-                    const temp = document.createElement('div');
-                    temp.appendChild(codeBlockClone);
-                    return temp.innerHTML;
+                // Code blocks (```code```)
+                result = result.replace(/```([^`]*?)```/g, (match, code) => {
+                    return `<div class="my-2 p-3 bg-gray-100 dark:bg-gray-700 rounded-md overflow-x-auto font-mono text-sm">${code.trim()}</div>`;
                 });
                 
-                // If no code blocks were found, just wrap in paragraph
-                if (result === text && !text.includes('<div class="code-block">')) {
-                    // Check for inline code (using backticks)
-                    result = text.replace(/`([^`]+)`/g, '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-red-500 dark:text-red-400 font-mono text-sm">$1</code>');
-                    
-                    // Convert URLs to links
-                    result = result.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="underline text-blue-500 dark:text-blue-300">$1</a>');
-                    
-                    // Convert line breaks to <br>
-                    result = result.replace(/\n/g, '<br>');
-                }
+                // Inline code (`code`)
+                result = result.replace(/`([^`]+)`/g, '<code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-red-600 dark:text-red-400 font-mono text-sm">$1</code>');
+                
+                // Bold (**text**)
+                result = result.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                
+                // Italic (*text*)
+                result = result.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+                
+                // Convert URLs to links
+                result = result.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="underline text-blue-500 dark:text-blue-300">$1</a>');
+                
+                // Convert line breaks to <br>
+                result = result.replace(/\n/g, '<br>');
                 
                 return result;
-            }
-            
-            // Detect language from code element class
-            function detectLanguage(className) {
-                const match = className.match(/language-(\w+)/);
-                return match ? match[1] : '';
-            }
-            
-            // Copy text to clipboard
-            function copyToClipboard(text) {
-                navigator.clipboard.writeText(text).catch(err => {
-                    console.error('Could not copy text: ', err);
-                });
-            }
-            
-            // Show toast notification
-            function showToast(message, duration = 3000) {
-                const toast = document.createElement('div');
-                toast.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in';
-                toast.textContent = message;
-                document.body.appendChild(toast);
-                
-                setTimeout(() => {
-                    toast.classList.add('opacity-0', 'transition-opacity', 'duration-500');
-                    setTimeout(() => {
-                        document.body.removeChild(toast);
-                    }, 500);
-                }, duration);
-            }
-            
-            // Open code playground
-            function openPlayground(code, language) {
-                // Create playground element from template
-                const playgroundClone = playgroundTemplate.content.cloneNode(true);
-                const playground = playgroundClone.querySelector('.playground');
-                const editor = playgroundClone.querySelector('.playground-editor');
-                const preview = playgroundClone.querySelector('.playground-preview');
-                const tabs = playgroundClone.querySelectorAll('.playground-tab');
-                const updatePreviewBtn = playgroundClone.querySelector('.update-preview');
-                const copyCodeBtn = playgroundClone.querySelector('.copy-code');
-                const closePlaygroundBtn = playgroundClone.querySelector('.close-playground');
-                
-                // Set initial code
-                editor.value = code;
-                
-                // Create message container for the playground
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'flex justify-center message-enter mb-4';
-                messageDiv.appendChild(playground);
-                chatContainer.appendChild(messageDiv);
-                
-                // Initialize preview if it's HTML
-                if (language === 'html') {
-                    updatePreview();
-                }
-                
-                // Tab switching
-                tabs.forEach(tab => {
-                    tab.addEventListener('click', () => {
-                        const tabName = tab.getAttribute('data-tab');
-                        
-                        // Update active tab
-                        tabs.forEach(t => t.classList.remove('active'));
-                        tab.classList.add('active');
-                        
-                        // Show/hide content
-                        if (tabName === 'editor') {
-                            editor.classList.remove('hidden');
-                            preview.classList.add('hidden');
-                        } else {
-                            editor.classList.add('hidden');
-                            preview.classList.remove('hidden');
-                            if (language === 'html') {
-                                updatePreview();
-                            }
-                        }
-                    });
-                });
-                
-                // Update preview button
-                updatePreviewBtn.addEventListener('click', () => {
-                    updatePreview();
-                    if (tabs[1].classList.contains('active') === false) {
-                        tabs[0].classList.remove('active');
-                        tabs[1].classList.add('active');
-                        editor.classList.add('hidden');
-                        preview.classList.remove('hidden');
-                    }
-                });
-                
-                // Copy code button
-                copyCodeBtn.addEventListener('click', () => {
-                    copyToClipboard(editor.value);
-                    showToast('Code copied to clipboard!');
-                });
-                
-                // Close playground button
-                closePlaygroundBtn.addEventListener('click', () => {
-                    messageDiv.remove();
-                });
-                
-                // Update preview function
-                function updatePreview() {
-                    if (language === 'html') {
-                        // Create sandbox iframe for HTML preview
-                        const iframe = document.createElement('iframe');
-                        iframe.style.width = '100%';
-                        iframe.style.height = '100%';
-                        iframe.style.border = 'none';
-                        iframe.sandbox = 'allow-scripts';
-                        
-                        // Clear previous content
-                        preview.innerHTML = '';
-                        preview.appendChild(iframe);
-                        
-                        // Set content
-                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                        iframeDoc.open();
-                        iframeDoc.write(editor.value);
-                        iframeDoc.close();
-                        
-                        // Apply dark mode if needed
-                        if (document.documentElement.classList.contains('dark')) {
-                            try {
-                                const style = iframeDoc.createElement('style');
-                                style.textContent = 'body { color: #f3f4f6; background-color: #1a1a1a; }';
-                                iframeDoc.head.appendChild(style);
-                            } catch (e) {
-                                console.error('Error applying dark mode to iframe', e);
-                            }
-                        }
-                    } else {
-                        preview.innerHTML = '<div class="p-4 text-center text-gray-500">Preview is only available for HTML content</div>';
-                    }
-                }
-                
-                // Scroll to playground
-                setTimeout(() => {
-                    playground.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 100);
             }
             
             // Initialize
@@ -716,14 +646,6 @@
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     if (document.activeElement === messageInput && messageInput.value.trim()) {
                         chatForm.dispatchEvent(new Event('submit'));
-                    }
-                }
-                
-                // Escape to close playground if open
-                if (e.key === 'Escape') {
-                    const playground = document.querySelector('.playground');
-                    if (playground) {
-                        playground.closest('.message-enter').remove();
                     }
                 }
             });
